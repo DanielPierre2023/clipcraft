@@ -1,144 +1,66 @@
-"""Video generation service - wraps Runway ML / Replicate APIs."""
+"""Video service integrating Runway ML and Replicate APIs."""
 import asyncio
 import httpx
-import os
-import json
 import time
 import uuid
-import struct
-import zlib
 from pathlib import Path
 from typing import Optional, Callable, Dict
 
 
 class VideoService:
-    """Generates videos via Runway ML or Replicate APIs with demo mode fallback."""
 
-    def __init__(self, provider: str = "runway", api_key: str = "",
-                 cache_dir: str = "./cache/videos"):
+    def __init__(self, provider: str = "runway", api_key: str = "", cache_dir: str = "./cache/videos"):
         self.provider = provider
         self.api_key = api_key
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
-        self.client = httpx.AsyncClient(timeout=300.0)
         self.demo_mode = not api_key
 
     async def generate(self, prompt: str, duration_sec: int = 5,
                        resolution: str = "1280x720", style: str = "cinematic",
                        progress_callback: Optional[Callable] = None) -> Dict:
-        """Generate a video from a text prompt.
-
-        Returns dict with video_url, duration, resolution, cost.
-        """
         if self.demo_mode:
-            return await self._generate_demo(prompt, duration_sec,
-                                             resolution, progress_callback)
+            return await self._generate_demo(prompt, duration_sec, resolution, progress_callback)
 
-        if self.provider == "runway":
-            return await self._generate_runway(prompt, duration_sec,
-                                               resolution, style,
-                                               progress_callback)
-        elif self.provider == "replicate":
-            return await self._generate_replicate(prompt, duration_sec,
-                                                  resolution, style,
-                                                  progress_callback)
-        else:
-            raise ValueError(f"Unknown provider: {self.provider}")
+        async with httpx.AsyncClient(timeout=300.0) as client:
+            if self.provider == "runway":
+                return await self._generate_runway(client, prompt, duration_sec, resolution, style, progress_callback)
+            elif self.provider == "replicate":
+                return await self._generate_replicate(client, prompt, duration_sec, resolution, style, progress_callback)
+            else:
+                raise ValueError(f"Unknown provider: {self.provider}")
 
-    async def _generate_demo(self, prompt, duration_sec, resolution,
-                             progress_callback=None):
-        """Create a demo animated SVG when no API key is set."""
+    async def _generate_demo(self, prompt, duration_sec, resolution, progress_callback=None):
         if progress_callback:
             progress_callback(10, "preparing", "Demo mode: creating animated preview")
 
         width, height = map(int, resolution.split("x"))
 
-        # Simulate generation time with progress updates
-        for pct in range(20, 90, 15):
-            await asyncio.sleep(0.4)
+        for pct in range(20, 90, 20):
+            await asyncio.sleep(0.3)
             if progress_callback:
                 progress_callback(pct, "generating", f"Demo rendering frame {pct}%")
 
-        # Generate an animated SVG as demo output
         video_id = uuid.uuid4().hex[:8]
         svg_filename = f"demo_{video_id}.svg"
         svg_path = self.cache_dir / svg_filename
 
-        # Hash prompt to get deterministic but varied colors
         prompt_hash = hash(prompt) & 0xFFFFFF
         color1 = f"#{(prompt_hash & 0xFFFFFF):06x}"
         color2 = f"#{((prompt_hash >> 4) & 0xFFFFFF):06x}"
-        color3 = f"#{((prompt_hash >> 8) & 0xFFFFFF):06x}"
-
-        # Truncate prompt for display
         display_prompt = prompt[:60] + "..." if len(prompt) > 60 else prompt
 
-        svg_content = f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" width="{width}" height="{height}">
-  <defs>
-    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#0f0f23"/>
-      <stop offset="50%" style="stop-color:#1a1a3e"/>
-      <stop offset="100%" style="stop-color:#0f0f23"/>
-    </linearGradient>
-    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="0%">
-      <stop offset="0%" style="stop-color:{color1}"/>
-      <stop offset="50%" style="stop-color:{color2}"/>
-      <stop offset="100%" style="stop-color:{color3}"/>
-    </linearGradient>
-    <filter id="glow">
-      <feGaussianBlur stdDeviation="3" result="blur"/>
-      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-    </filter>
-  </defs>
-
-  <rect width="{width}" height="{height}" fill="url(#bg)"/>
-
-  <!-- Animated circles -->
-  <circle cx="{width*0.3}" cy="{height*0.4}" r="60" fill="{color1}" opacity="0.3" filter="url(#glow)">
-    <animate attributeName="r" values="60;90;60" dur="{duration_sec}s" repeatCount="indefinite"/>
-    <animate attributeName="cx" values="{width*0.3};{width*0.5};{width*0.3}" dur="{duration_sec*1.5}s" repeatCount="indefinite"/>
-  </circle>
-  <circle cx="{width*0.7}" cy="{height*0.6}" r="45" fill="{color2}" opacity="0.3" filter="url(#glow)">
-    <animate attributeName="r" values="45;75;45" dur="{duration_sec*0.8}s" repeatCount="indefinite"/>
-    <animate attributeName="cy" values="{height*0.6};{height*0.3};{height*0.6}" dur="{duration_sec*1.2}s" repeatCount="indefinite"/>
-  </circle>
-  <circle cx="{width*0.5}" cy="{height*0.5}" r="30" fill="{color3}" opacity="0.25" filter="url(#glow)">
-    <animate attributeName="r" values="30;55;30" dur="{duration_sec*1.1}s" repeatCount="indefinite"/>
-  </circle>
-
-  <!-- Animated lines -->
-  <line x1="0" y1="{height*0.5}" x2="{width}" y2="{height*0.5}" stroke="url(#accent)" stroke-width="2" opacity="0.4">
-    <animate attributeName="y1" values="{height*0.5};{height*0.3};{height*0.5}" dur="{duration_sec}s" repeatCount="indefinite"/>
-    <animate attributeName="y2" values="{height*0.5};{height*0.7};{height*0.5}" dur="{duration_sec}s" repeatCount="indefinite"/>
-  </line>
-
-  <!-- Title text -->
-  <text x="{width/2}" y="{height*0.35}" text-anchor="middle" fill="white" font-family="system-ui, sans-serif" font-size="28" font-weight="bold" opacity="0.9">
-    ClipCraft Demo
-    <animate attributeName="opacity" values="0.9;1;0.9" dur="2s" repeatCount="indefinite"/>
-  </text>
-
-  <!-- Prompt text -->
-  <text x="{width/2}" y="{height*0.55}" text-anchor="middle" fill="#a78bfa" font-family="system-ui, sans-serif" font-size="16" opacity="0.8">
-    {display_prompt}
-  </text>
-
-  <!-- Duration / resolution info -->
-  <text x="{width/2}" y="{height*0.7}" text-anchor="middle" fill="#666" font-family="system-ui, sans-serif" font-size="13">
-    {duration_sec}s | {resolution} | {style if 'style' in dir() else 'cinematic'}
-  </text>
-
-  <!-- Animated progress bar at bottom -->
-  <rect x="{width*0.1}" y="{height*0.85}" width="{width*0.8}" height="4" rx="2" fill="#333"/>
-  <rect x="{width*0.1}" y="{height*0.85}" width="0" height="4" rx="2" fill="url(#accent)">
-    <animate attributeName="width" values="0;{width*0.8};0" dur="{duration_sec}s" repeatCount="indefinite"/>
-  </rect>
-</svg>'''
+        svg_content = f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}">
+            <rect width="{width}" height="{height}" fill="#0f0f23"/>
+            <circle cx="{width*0.5}" cy="{height*0.4}" r="80" fill="{color1}" opacity="0.4"/>
+            <text x="{width/2}" y="{height*0.4}" text-anchor="middle" fill="white" font-size="24">ClipCraft Demo</text>
+            <text x="{width/2}" y="{height*0.55}" text-anchor="middle" fill="#a78bfa" font-size="16">{display_prompt}</text>
+        </svg>'''
 
         svg_path.write_text(svg_content)
 
         if progress_callback:
-            progress_callback(95, "finalizing", "Demo video ready")
+            progress_callback(100, "completed", "Demo video ready")
 
         return {
             "video_url": f"/cache/videos/{svg_filename}",
@@ -149,99 +71,113 @@ class VideoService:
             "demo": True,
         }
 
-    async def _generate_runway(self, prompt, duration_sec, resolution,
-                               style, progress_callback=None):
-        """Generate video using Runway ML Gen-3 API."""
+    async def _generate_replicate(self, client: httpx.AsyncClient, prompt, duration_sec, resolution, style, progress_callback=None):
         if progress_callback:
-            progress_callback(10, "submitting", "Sending to Runway ML API")
+            progress_callback(10, "submitting", "Sending to Replicate API")
 
-        response = await self.client.post(
-            "https://api.runwayml.com/v1/generations",
+        # Stable Video Diffusion model standard API payload
+        width, height = map(int, resolution.split("x"))
+        response = await client.post(
+            "https://api.replicate.com/v1/models/stability-ai/stable-video-diffusion/predictions",
             headers={
                 "Authorization": f"Bearer {self.api_key}",
                 "Content-Type": "application/json",
             },
             json={
-                "prompt": prompt,
-                "duration": duration_sec,
-                "resolution": resolution,
-                "style": style,
-            }
-        )
-        response.raise_for_status()
-        job = response.json()
-        job_id = job["id"]
-
-        # Poll for completion
-        result = await self._poll_job(
-            f"https://api.runwayml.com/v1/generations/{job_id}",
-            {"Authorization": f"Bearer {self.api_key}"},
-            progress_callback
-        )
-        return result
-
-    async def _generate_replicate(self, prompt, duration_sec, resolution,
-                                  style, progress_callback=None):
-        """Generate video using Replicate API."""
-        if progress_callback:
-            progress_callback(10, "submitting", "Sending to Replicate API")
-
-        response = await self.client.post(
-            "https://api.replicate.com/v1/predictions",
-            headers={
-                "Authorization": f"Token {self.api_key}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "version": "latest",
                 "input": {
-                    "prompt": f"{style}: {prompt}",
-                    "num_frames": duration_sec * 24,
-                    "width": int(resolution.split("x")[0]),
-                    "height": int(resolution.split("x")[1]),
+                    "cond_augmented_prompt": f"{style}: {prompt}",
+                    "video_length": f"{duration_sec}s",
+                    "width": width,
+                    "height": height
                 }
             }
         )
         response.raise_for_status()
         prediction = response.json()
+        poll_url = prediction["urls"]["get"]
 
-        result = await self._poll_job(
-            prediction["urls"]["get"],
-            {"Authorization": f"Token {self.api_key}"},
-            progress_callback
-        )
-        return result
+        return await self._poll_replicate_job(client, poll_url, progress_callback)
 
-    async def _poll_job(self, url, headers, progress_callback=None,
-                        timeout: int = 600):
-        """Poll a generation job until completion."""
+    async def _poll_replicate_job(self, client: httpx.AsyncClient, poll_url: str, progress_callback=None, timeout: int = 600):
         start = time.time()
+        headers = {"Authorization": f"Bearer {self.api_key}"}
+
         while time.time() - start < timeout:
-            resp = await self.client.get(url, headers=headers)
+            resp = await client.get(poll_url, headers=headers)
             resp.raise_for_status()
-            status = resp.json()
+            data = resp.json()
+            status = data.get("status")
 
-            if status.get("status") == "succeeded":
-                output = status.get("output", {})
+            if status == "succeeded":
+                output = data.get("output")
+                # Handle Replicate list vs string output formats
+                video_url = output[0] if isinstance(output, list) else output
                 return {
-                    "video_url": output.get("url", output.get("video")),
-                    "duration": status.get("duration", 5),
-                    "resolution": status.get("resolution", "1280x720"),
-                    "cost": status.get("cost", 0.05),
+                    "video_url": video_url,
+                    "duration": 5,
+                    "resolution": "1280x720",
+                    "cost": 0.05,
                 }
-            elif status.get("status") == "failed":
-                raise RuntimeError(f"Generation failed: {status.get('error')}")
+            elif status == "failed":
+                raise RuntimeError(f"Replicate generation failed: {data.get('error')}")
 
-            pct = status.get("progress", 0)
-            if progress_callback and pct:
-                progress_callback(int(pct * 100), "generating",
-                                  "Rendering video frames")
+            if progress_callback:
+                progress_callback(50, "generating", "Rendering video frames")
 
-            await asyncio.sleep(5)
+            await asyncio.sleep(4)
 
-        raise TimeoutError("Video generation timed out")
+        raise TimeoutError("Replicate generation timed out")
 
-    def get_status(self, job_id: str) -> Dict:
-        """Get the status of a generation job (sync wrapper)."""
-        return {"job_id": job_id, "status": "unknown",
-                "message": "Use async polling for real-time status"}
+    async def _generate_runway(self, client: httpx.AsyncClient, prompt, duration_sec, resolution, style, progress_callback=None):
+        if progress_callback:
+            progress_callback(10, "submitting", "Sending to Runway ML API")
+
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "X-Runway-Version": "2024-11-06",
+            "Content-Type": "application/json",
+        }
+        response = await client.post(
+            "https://api.dev.runwayml.com/v1/tasks",
+            headers=headers,
+            json={
+                "taskType": "gen3a_turbo",
+                "promptText": f"{style}: {prompt}",
+                "duration": duration_sec,
+                "ratio": "16:9"
+            }
+        )
+        response.raise_for_status()
+        task_id = response.json()["id"]
+
+        return await self._poll_runway_job(client, task_id, headers, progress_callback)
+
+    async def _poll_runway_job(self, client: httpx.AsyncClient, task_id: str, headers: Dict, progress_callback=None, timeout: int = 600):
+        start = time.time()
+        url = f"https://api.dev.runwayml.com/v1/tasks/{task_id}"
+
+        while time.time() - start < timeout:
+            resp = await client.get(url, headers=headers)
+            resp.raise_for_status()
+            data = resp.json()
+            status = data.get("status")
+
+            if status == "SUCCEEDED":
+                output = data.get("output", [])
+                video_url = output[0] if isinstance(output, list) and output else None
+                return {
+                    "video_url": video_url,
+                    "duration": 5,
+                    "resolution": "1280x720",
+                    "cost": 0.08,
+                }
+            elif status == "FAILED":
+                raise RuntimeError(f"Runway task failed: {data.get('failure')}")
+
+            progress = int(data.get("progress", 0.5) * 100)
+            if progress_callback:
+                progress_callback(progress, "generating", "Rendering video frames")
+
+            await asyncio.sleep(4)
+
+        raise TimeoutError("Runway generation timed out")
