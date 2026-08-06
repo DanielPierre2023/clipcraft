@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ClipCraft - AI Video Generation</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg-primary: #0a0a0f;
+      --bg-secondary: #12121a;
+      --bg-card: #16161f;
+      --bg-input: #1a1a26;
+      --border: #2a2a3a;
+      --border-focus: #7c3aed;
+      --text-primary: #e5e5ef;
+      --text-secondary: #9999aa;
+      --text-muted: #666680;
+      --accent: #7c3aed;
+      --accent-light: #a855f7;
+      --accent-glow: rgba(124, 58, 237, 0.25);
+      --success: #22c55e;
+      --error: #ef4444;
+      --warning: #f59e0b;
+      --radius: 12px;
+      --radius-sm: 8px;
+    }
+
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      line-height: 1.6;
+    }
+
+    /* --- Header --- */
+    .header {
+      background: linear-gradient(180deg, rgba(124,58,237,0.08) 0%, transparent 100%);
+      border-bottom: 1px solid var(--border);
+      padding: 20px 0;
+    }
+    .header-inner {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .logo {
+      font-size: 28px;
+      font-weight: 800;
+      background: linear-gradient(135deg, #7c3aed, #a855f7, #c084fc);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      letter-spacing: -0.5px;
+    }
+    .logo-sub {
+      font-size: 13px;
+      color: var(--text-muted);
+      font-weight: 400;
+    }
+    .demo-badge {
+      background: rgba(124,58,237,0.15);
+      color: var(--accent-light);
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      border: 1px solid rgba(124,58,237,0.3);
+    }
+
+    /* --- Main Content --- */
+    .container {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 32px 24px;
+    }
+
+    /* --- Generate Card --- */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 28px;
+      margin-bottom: 24px;
+    }
+    .card-title {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 20px;
+      color: var(--text-primary);
+    }
+
+    /* --- Prompt Input --- */
+    .prompt-wrapper {
+      position: relative;
+      margin-bottom: 20px;
+    }
+    .prompt-input {
+      width: 100%;
+      padding: 16px 20px;
+      font-size: 16px;
+      border: 2px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--bg-input);
+      color: var(--text-primary);
+      font-family: inherit;
+      resize: none;
+      min-height: 80px;
+      transition: border-color 0.2s;
+    }
+    .prompt-input:focus {
+      outline: none;
+      border-color: var(--border-focus);
+      box-shadow: 0 0 0 4px var(--accent-glow);
+    }
+    .prompt-input::placeholder { color: var(--text-muted); }
+    .char-count {
+      position: absolute;
+      bottom: 10px;
+      right: 14px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    /* --- Controls Row --- */
+    .controls {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+      align-items: flex-end;
+    }
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      flex: 1;
+      min-width: 140px;
+    }
+    .control-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .control-select {
+      padding: 12px 16px;
+      border-radius: var(--radius-sm);
+      background: var(--bg-input);
+      color: var(--text-primary);
+      border: 2px solid var(--border);
+      font-size: 14px;
+      font-family: inherit;
+      cursor: pointer;
+      transition: border-color 0.2s;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%239999aa' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+      padding-right: 36px;
+    }
+    .control-select:focus {
+      outline: none;
+      border-color: var(--border-focus);
+    }
+
+    /* --- Generate Button --- */
+    .generate-btn {
+      padding: 14px 36px;
+      background: linear-gradient(135deg, #7c3aed, #6d28d9);
+      color: white;
+      border: none;
+      border-radius: var(--radius-sm);
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: inherit;
+      white-space: nowrap;
+      min-width: 180px;
+    }
+    .generate-btn:hover:not(:disabled) {
+      background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 20px var(--accent-glow);
+    }
+    .generate-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+    .generate-btn.generating {
+      background: linear-gradient(135deg, #6d28d9, #5b21b6);
+    }
+
+    /* --- Progress Bar --- */
+    .progress-section {
+      display: none;
+      margin-top: 20px;
+    }
+    .progress-section.active { display: block; }
+    .progress-bar-track {
+      width: 100%;
+      height: 6px;
+      background: var(--border);
+      border-radius: 3px;
+      overflow: hidden;
+      margin-bottom: 12px;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #7c3aed, #a855f7, #c084fc);
+      border-radius: 3px;
+      transition: width 0.4s ease;
+      width: 0%;
+      position: relative;
+    }
+    .progress-bar-fill::after {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent);
+      animation: shimmer 2s infinite;
+    }
+    @keyframes shimmer {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(100%); }
+    }
+    .progress-info {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .progress-stage {
+      font-size: 14px;
+      color: var(--accent-light);
+      font-weight: 500;
+    }
+    .progress-pct {
+      font-size: 14px;
+      color: var(--text-secondary);
+      font-weight: 600;
+    }
+
+    /* --- Result Section --- */
+    .result-section {
+      display: none;
+      margin-top: 24px;
+    }
+    .result-section.active { display: block; }
+    .result-player {
+      position: relative;
+      background: var(--bg-secondary);
+      border-radius: var(--radius);
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+    .result-player video,
+    .result-player img,
+    .result-player object {
+      width: 100%;
+      display: block;
+      border-radius: var(--radius);
+    }
+    .result-actions {
+      display: flex;
+      gap: 12px;
+      margin-top: 16px;
+      flex-wrap: wrap;
+    }
+    .btn-secondary {
+      padding: 10px 20px;
+      background: var(--bg-input);
+      color: var(--text-primary);
+      border: 2px solid var(--border);
+      border-radius: var(--radius-sm);
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.2s;
+    }
+    .btn-secondary:hover {
+      border-color: var(--accent);
+      background: rgba(124,58,237,0.1);
+    }
+    .btn-download {
+      padding: 10px 20px;
+      background: linear-gradient(135deg, #22c55e, #16a34a);
+      color: white;
+      border: none;
+      border-radius: var(--radius-sm);
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s;
+    }
+    .btn-download:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(34,197,94,0.3);
+    }
+
+    /* --- Error Banner --- */
+    .error-banner {
+      display: none;
+      padding: 14px 20px;
+      background: rgba(239,68,68,0.1);
+      border: 1px solid rgba(239,68,68,0.3);
+      border-radius: var(--radius-sm);
+      color: var(--error);
+      font-size: 14px;
+      margin-top: 16px;
+    }
+    .error-banner.active { display: block; }
+
+    /* --- Job History --- */
+    .history-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .history-item {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 16px;
+      background: var(--bg-input);
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .history-item:hover {
+      border-color: var(--accent);
+      background: rgba(124,58,237,0.05);
+    }
+    .history-status {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .history-status.completed { background: var(--success); }
+    .history-status.processing { background: var(--warning); animation: pulse 1.5s infinite; }
+    .history-status.pending { background: var(--text-muted); }
+    .history-status.failed { background: var(--error); }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+    .history-info { flex: 1; min-width: 0; }
+    .history-prompt {
+      font-size: 14px;
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .history-meta {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+    .history-empty {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+
+    /* --- Footer --- */
+    .footer {
+      text-align: center;
+      padding: 32px 24px;
+      color: var(--text-muted);
+      font-size: 13px;
+      border-top: 1px solid var(--border);
+      margin-top: 48px;
+    }
+
+    /* --- Responsive --- */
+    @media (max-width: 640px) {
+      .controls { flex-direction: column; }
+      .control-group { min-width: 100%; }
+      .generate-btn { width: 100%; }
+      .header-inner { flex-direction: column; gap: 12px; text-align: center; }
+      .result-actions { flex-direction: column; }
+      .btn-download, .btn-secondary { width: 100%; text-align: center; justify-content: center; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header class="header">
+    <div class="header-inner">
+      <div>
+        <div class="logo">ClipCraft</div>
+        <div class="logo-sub">AI Video Generation Platform</div>
+      </div>
+      <div class="demo-badge" id="demoBadge">DEMO MODE</div>
+    </div>
+  </header>
+
+  <div class="container">
+
+    <!-- Generate Section -->
+    <div class="card">
+      <div class="card-title">Create a Video</div>
+
+      <div class="prompt-wrapper">
+        <textarea
+          class="prompt-input"
+          id="prompt"
+          placeholder="Describe the video you want to generate...&#10;e.g. A cinematic drone shot over a misty mountain range at sunrise"
+          maxlength="500"
+          rows="3"
+        ></textarea>
+        <div class="char-count"><span id="charCount">0</span>/500</div>
+      </div>
+
+      <div class="controls">
+        <div class="control-group">
+          <label class="control-label">Style</label>
+          <select class="control-select" id="style">
+            <option value="cinematic">Cinematic</option>
+            <option value="anime">Anime</option>
+            <option value="drone">Drone Shot</option>
+            <option value="macro">Macro</option>
+            <option value="timelapse">Timelapse</option>
+            <option value="slow-motion">Slow Motion</option>
+          </select>
+        </div>
+
+        <div class="control-group">
+          <label class="control-label">Duration</label>
+          <select class="control-select" id="duration">
+            <option value="2">2 seconds</option>
+            <option value="3">3 seconds</option>
+            <option value="5" selected>5 seconds</option>
+            <option value="10">10 seconds</option>
+            <option value="15">15 seconds</option>
+          </select>
+        </div>
+
+        <div class="control-group">
+          <label class="control-label">Resolution</label>
+          <select class="control-select" id="resolution">
+            <option value="640x360">360p</option>
+            <option value="1280x720" selected>720p</option>
+            <option value="1920x1080">1080p</option>
+            <option value="3840x2160">4K</option>
+          </select>
+        </div>
+
+        <div class="control-group" style="justify-content: flex-end;">
+          <button class="generate-btn" id="genBtn" onclick="generate()">
+            Generate Video
+          </button>
+        </div>
+      </div>
+
+      <!-- Progress -->
+      <div class="progress-section" id="progressSection">
+        <div class="progress-bar-track">
+          <div class="progress-bar-fill" id="progressFill"></div>
+        </div>
+        <div class="progress-info">
+          <span class="progress-stage" id="progressStage">Initializing...</span>
+          <span class="progress-pct" id="progressPct">0%</span>
+        </div>
+      </div>
+
+      <!-- Error -->
+      <div class="error-banner" id="errorBanner"></div>
+
+      <!-- Result -->
+      <div class="result-section" id="resultSection">
+        <div class="result-player" id="resultPlayer"></div>
+        <div class="result-actions">
+          <a class="btn-download" id="downloadBtn" href="#" download>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Download
+          </a>
+          <button class="btn-secondary" onclick="generateAnother()">Generate Another</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Job History -->
+    <div class="card">
+      <div class="card-title">Generation History</div>
+      <div class="history-list" id="historyList">
+        <div class="history-empty" id="historyEmpty">
+          No videos generated yet. Create your first video above!
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <footer class="footer">
+    ClipCraft &mdash; AI-powered video generation &middot; Built with FastAPI
+  </footer>
+
+  <script>
+    const API_KEY = 'demo';
+    let pollInterval = null;
+    let currentJobId = null;
+
+    // --- Character count ---
+    const promptEl = document.getElementById('prompt');
+    const charCountEl = document.getElementById('charCount');
+    promptEl.addEventListener('input', () => {
+      charCountEl.textContent = promptEl.value.length;
+    });
+
+    // --- Check demo mode ---
+    fetch('/api/health')
+      .then(r => r.json())
+      .then(data => {
+        if (!data.demo_mode) {
+          document.getElementById('demoBadge').style.display = 'none';
+        }
+      })
+      .catch(() => {});
+
+    // --- Generate ---
+    async function generate() {
+      const prompt = promptEl.value.trim();
+      if (!prompt || prompt.length < 3) {
+        showError('Please enter a prompt (at least 3 characters).');
+        return;
+      }
+
+      const style = document.getElementById('style').value;
+      const duration = parseInt(document.getElementById('duration').value);
+      const resolution = document.getElementById('resolution').value;
+      const btn = document.getElementById('genBtn');
+
+      // Reset UI
+      btn.disabled = true;
+      btn.textContent = 'Generating...';
+      btn.classList.add('generating');
+      hideError();
+      hideResult();
+      showProgress();
+
+      try {
+        const res = await fetch('/api/generate', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-API-Key': API_KEY
+          },
+          body: JSON.stringify({ prompt, style, duration, resolution })
+        });
+
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.detail || 'Failed to start generation');
+        }
+
+        const data = await res.json();
+        currentJobId = data.job_id;
+        pollForResult(data.job_id);
+      } catch (e) {
+        showError(e.message);
+        resetButton();
+      }
+    }
+
+    // --- Poll for result ---
+    function pollForResult(jobId) {
+      if (pollInterval) clearInterval(pollInterval);
+
+      pollInterval = setInterval(async () => {
+        try {
+          const res = await fetch(`/api/jobs/${jobId}`, {
+            headers: { 'X-API-Key': API_KEY }
+          });
+          if (!res.ok) throw new Error('Failed to check status');
+
+          const data = await res.json();
+          updateProgress(data.progress, data.stage);
+
+          if (data.status === 'completed') {
+            clearInterval(pollInterval);
+            pollInterval = null;
+            showResult(data.result_url);
+            resetButton();
+            loadHistory();
+          } else if (data.status === 'failed') {
+            clearInterval(pollInterval);
+            pollInterval = null;
+            showError(data.error || 'Video generation failed');
+            hideProgress();
+            resetButton();
+            loadHistory();
+          }
+        } catch (e) {
+          clearInterval(pollInterval);
+          pollInterval = null;
+          showError('Lost connection. Please try again.');
+          resetButton();
+        }
+      }, 1500);
+    }
+
+    // --- Progress UI ---
+    function showProgress() {
+      document.getElementById('progressSection').classList.add('active');
+      updateProgress(0, 'Submitting job...');
+    }
+    function hideProgress() {
+      document.getElementById('progressSection').classList.remove('active');
+    }
+    function updateProgress(pct, stage) {
+      document.getElementById('progressFill').style.width = pct + '%';
+      document.getElementById('progressPct').textContent = pct + '%';
+      document.getElementById('progressStage').textContent = stage || 'Processing...';
+    }
+
+    // --- Result UI ---
+    function showResult(url) {
+      hideProgress();
+      const section = document.getElementById('resultSection');
+      const player = document.getElementById('resultPlayer');
+      const downloadBtn = document.getElementById('downloadBtn');
+
+      // Determine content type from URL
+      if (url.endsWith('.svg')) {
+        player.innerHTML = `<object data="${url}" type="image/svg+xml" style="width:100%;min-height:400px;border-radius:12px;background:#0f0f23;"></object>`;
+      } else if (url.endsWith('.mp4') || url.endsWith('.webm')) {
+        player.innerHTML = `<video controls autoplay loop playsinline src="${url}" style="width:100%;border-radius:12px;"></video>`;
+      } else {
+        player.innerHTML = `<video controls autoplay loop playsinline src="${url}" style="width:100%;border-radius:12px;"></video>`;
+      }
+
+      downloadBtn.href = url;
+      section.classList.add('active');
+    }
+    function hideResult() {
+      document.getElementById('resultSection').classList.remove('active');
+    }
+    function generateAnother() {
+      hideResult();
+      promptEl.value = '';
+      charCountEl.textContent = '0';
+      promptEl.focus();
+    }
+
+    // --- Error UI ---
+    function showError(msg) {
+      const el = document.getElementById('errorBanner');
+      el.textContent = msg;
+      el.classList.add('active');
+    }
+    function hideError() {
+      document.getElementById('errorBanner').classList.remove('active');
+    }
+
+    // --- Button reset ---
+    function resetButton() {
+      const btn = document.getElementById('genBtn');
+      btn.disabled = false;
+      btn.textContent = 'Generate Video';
+      btn.classList.remove('generating');
+    }
+
+    // --- Job History ---
+    async function loadHistory() {
+      try {
+        const res = await fetch('/api/jobs', {
+          headers: { 'X-API-Key': API_KEY }
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+
+        const list = document.getElementById('historyList');
+        const empty = document.getElementById('historyEmpty');
+
+        if (!data.jobs || data.jobs.length === 0) {
+          empty.style.display = 'block';
+          return;
+        }
+
+        empty.style.display = 'none';
+        // Keep only the job items, not the empty message
+        list.innerHTML = '';
+        list.appendChild(empty);
+        empty.style.display = 'none';
+
+        data.jobs.forEach(job => {
+          const item = document.createElement('div');
+          item.className = 'history-item';
+          item.onclick = () => {
+            if (job.status === 'completed' && job.result_url) {
+              showResult(job.result_url);
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+          };
+
+          const statusClass = job.status || 'pending';
+          const timeAgo = formatTimeAgo(job.created_at);
+
+          item.innerHTML = `
+            <div class="history-status ${statusClass}"></div>
+            <div class="history-info">
+              <div class="history-prompt">${escapeHtml(job.prompt)}</div>
+              <div class="history-meta">${job.style} &middot; ${job.duration_sec}s &middot; ${job.resolution} &middot; ${timeAgo}</div>
+            </div>
+          `;
+          list.appendChild(item);
+        });
+      } catch (e) {
+        // Silently fail -- history is non-critical
+      }
+    }
+
+    function formatTimeAgo(timestamp) {
+      if (!timestamp) return '';
+      const diff = Date.now() / 1000 - timestamp;
+      if (diff < 60) return 'just now';
+      if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+      if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+      return Math.floor(diff / 86400) + 'd ago';
+    }
+
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    // --- Load history on page load ---
+    loadHistory();
+  </script>
+</body>
+</html>
