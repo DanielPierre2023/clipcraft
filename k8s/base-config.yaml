@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: clipcraft
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: clipcraft-config
+  namespace: clipcraft
+data:
+  REDIS_URL: "redis://redis-service:6379/0"
+  DATABASE_URL: "postgresql+asyncpg://postgres:secret@postgres-service:5432/clipcraft"
+  DATABASE_URL_SYNC: "postgresql://postgres:secret@postgres-service:5432/clipcraft"
