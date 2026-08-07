@@ -1,751 +1,415 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ClipCraft - AI Video Generation</title>
+  <title>ClipCraft — AI Cinema Engine</title>
+  
+  <!-- Tailwind CSS v3 -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              bg: '#050507',
+              panel: '#09090d',
+              border: 'rgba(255, 255, 255, 0.08)',
+              accent: '#8b5cf6',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- React & Babel for Browser Executable UI -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  
+  <!-- Custom Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-    :root {
-      --bg-primary: #0a0a0f;
-      --bg-secondary: #12121a;
-      --bg-card: #16161f;
-      --bg-input: #1a1a26;
-      --border: #2a2a3a;
-      --border-focus: #7c3aed;
-      --text-primary: #e5e5ef;
-      --text-secondary: #9999aa;
-      --text-muted: #666680;
-      --accent: #7c3aed;
-      --accent-light: #a855f7;
-      --accent-glow: rgba(124, 58, 237, 0.25);
-      --success: #22c55e;
-      --error: #ef4444;
-      --warning: #f59e0b;
-      --radius: 12px;
-      --radius-sm: 8px;
-    }
-
-    body {
-      font-family: 'Inter', system-ui, -apple-system, sans-serif;
-      background: var(--bg-primary);
-      color: var(--text-primary);
-      min-height: 100vh;
-      line-height: 1.6;
-    }
-
-    /* --- Header --- */
-    .header {
-      background: linear-gradient(180deg, rgba(124,58,237,0.08) 0%, transparent 100%);
-      border-bottom: 1px solid var(--border);
-      padding: 20px 0;
-    }
-    .header-inner {
-      max-width: 960px;
-      margin: 0 auto;
-      padding: 0 24px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
-    .logo {
-      font-size: 28px;
-      font-weight: 800;
-      background: linear-gradient(135deg, #7c3aed, #a855f7, #c084fc);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-      letter-spacing: -0.5px;
-    }
-    .logo-sub {
-      font-size: 13px;
-      color: var(--text-muted);
-      font-weight: 400;
-    }
-    .demo-badge {
-      background: rgba(124,58,237,0.15);
-      color: var(--accent-light);
-      padding: 6px 14px;
-      border-radius: 20px;
-      font-size: 12px;
-      font-weight: 600;
-      border: 1px solid rgba(124,58,237,0.3);
-    }
-
-    /* --- Main Content --- */
-    .container {
-      max-width: 960px;
-      margin: 0 auto;
-      padding: 32px 24px;
-    }
-
-    /* --- Generate Card --- */
-    .card {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 28px;
-      margin-bottom: 24px;
-    }
-    .card-title {
-      font-size: 18px;
-      font-weight: 700;
-      margin-bottom: 20px;
-      color: var(--text-primary);
-    }
-
-    /* --- Prompt Input --- */
-    .prompt-wrapper {
-      position: relative;
-      margin-bottom: 20px;
-    }
-    .prompt-input {
-      width: 100%;
-      padding: 16px 20px;
-      font-size: 16px;
-      border: 2px solid var(--border);
-      border-radius: var(--radius);
-      background: var(--bg-input);
-      color: var(--text-primary);
-      font-family: inherit;
-      resize: none;
-      min-height: 80px;
-      transition: border-color 0.2s;
-    }
-    .prompt-input:focus {
-      outline: none;
-      border-color: var(--border-focus);
-      box-shadow: 0 0 0 4px var(--accent-glow);
-    }
-    .prompt-input::placeholder { color: var(--text-muted); }
-    .char-count {
-      position: absolute;
-      bottom: 10px;
-      right: 14px;
-      font-size: 12px;
-      color: var(--text-muted);
-    }
-
-    /* --- Controls Row --- */
-    .controls {
-      display: flex;
-      gap: 12px;
-      margin-bottom: 20px;
-      flex-wrap: wrap;
-      align-items: flex-end;
-    }
-    .control-group {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      flex: 1;
-      min-width: 140px;
-    }
-    .control-label {
-      font-size: 12px;
-      font-weight: 600;
-      color: var(--text-secondary);
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-    .control-select {
-      padding: 12px 16px;
-      border-radius: var(--radius-sm);
-      background: var(--bg-input);
-      color: var(--text-primary);
-      border: 2px solid var(--border);
-      font-size: 14px;
-      font-family: inherit;
-      cursor: pointer;
-      transition: border-color 0.2s;
-      appearance: none;
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%239999aa' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E");
-      background-repeat: no-repeat;
-      background-position: right 12px center;
-      padding-right: 36px;
-    }
-    .control-select:focus {
-      outline: none;
-      border-color: var(--border-focus);
-    }
-
-    /* --- Generate Button --- */
-    .generate-btn {
-      padding: 14px 36px;
-      background: linear-gradient(135deg, #7c3aed, #6d28d9);
-      color: white;
-      border: none;
-      border-radius: var(--radius-sm);
-      font-size: 16px;
-      font-weight: 700;
-      cursor: pointer;
-      transition: all 0.2s;
-      font-family: inherit;
-      white-space: nowrap;
-      min-width: 180px;
-    }
-    .generate-btn:hover:not(:disabled) {
-      background: linear-gradient(135deg, #8b5cf6, #7c3aed);
-      transform: translateY(-1px);
-      box-shadow: 0 4px 20px var(--accent-glow);
-    }
-    .generate-btn:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-      transform: none;
-    }
-    .generate-btn.generating {
-      background: linear-gradient(135deg, #6d28d9, #5b21b6);
-    }
-
-    /* --- Progress Bar --- */
-    .progress-section {
-      display: none;
-      margin-top: 20px;
-    }
-    .progress-section.active { display: block; }
-    .progress-bar-track {
-      width: 100%;
-      height: 6px;
-      background: var(--border);
-      border-radius: 3px;
-      overflow: hidden;
-      margin-bottom: 12px;
-    }
-    .progress-bar-fill {
-      height: 100%;
-      background: linear-gradient(90deg, #7c3aed, #a855f7, #c084fc);
-      border-radius: 3px;
-      transition: width 0.4s ease;
-      width: 0%;
-      position: relative;
-    }
-    .progress-bar-fill::after {
-      content: '';
-      position: absolute;
-      top: 0; left: 0; right: 0; bottom: 0;
-      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent);
-      animation: shimmer 2s infinite;
-    }
-    @keyframes shimmer {
-      0% { transform: translateX(-100%); }
-      100% { transform: translateX(100%); }
-    }
-    .progress-info {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    .progress-stage {
-      font-size: 14px;
-      color: var(--accent-light);
-      font-weight: 500;
-    }
-    .progress-pct {
-      font-size: 14px;
-      color: var(--text-secondary);
-      font-weight: 600;
-    }
-
-    /* --- Result Section --- */
-    .result-section {
-      display: none;
-      margin-top: 24px;
-    }
-    .result-section.active { display: block; }
-    .result-player {
-      position: relative;
-      background: var(--bg-secondary);
-      border-radius: var(--radius);
-      overflow: hidden;
-      border: 1px solid var(--border);
-    }
-    .result-player video,
-    .result-player img,
-    .result-player object {
-      width: 100%;
-      display: block;
-      border-radius: var(--radius);
-    }
-    .result-actions {
-      display: flex;
-      gap: 12px;
-      margin-top: 16px;
-      flex-wrap: wrap;
-    }
-    .btn-secondary {
-      padding: 10px 20px;
-      background: var(--bg-input);
-      color: var(--text-primary);
-      border: 2px solid var(--border);
-      border-radius: var(--radius-sm);
-      font-size: 14px;
-      font-weight: 600;
-      cursor: pointer;
-      font-family: inherit;
-      transition: all 0.2s;
-    }
-    .btn-secondary:hover {
-      border-color: var(--accent);
-      background: rgba(124,58,237,0.1);
-    }
-    .btn-download {
-      padding: 10px 20px;
-      background: linear-gradient(135deg, #22c55e, #16a34a);
-      color: white;
-      border: none;
-      border-radius: var(--radius-sm);
-      font-size: 14px;
-      font-weight: 600;
-      cursor: pointer;
-      font-family: inherit;
-      text-decoration: none;
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      transition: all 0.2s;
-    }
-    .btn-download:hover {
-      transform: translateY(-1px);
-      box-shadow: 0 4px 12px rgba(34,197,94,0.3);
-    }
-
-    /* --- Error Banner --- */
-    .error-banner {
-      display: none;
-      padding: 14px 20px;
-      background: rgba(239,68,68,0.1);
-      border: 1px solid rgba(239,68,68,0.3);
-      border-radius: var(--radius-sm);
-      color: var(--error);
-      font-size: 14px;
-      margin-top: 16px;
-    }
-    .error-banner.active { display: block; }
-
-    /* --- Job History --- */
-    .history-list {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
-    .history-item {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-      padding: 16px;
-      background: var(--bg-input);
-      border-radius: var(--radius-sm);
-      border: 1px solid var(--border);
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-    .history-item:hover {
-      border-color: var(--accent);
-      background: rgba(124,58,237,0.05);
-    }
-    .history-status {
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      flex-shrink: 0;
-    }
-    .history-status.completed { background: var(--success); }
-    .history-status.processing { background: var(--warning); animation: pulse 1.5s infinite; }
-    .history-status.pending { background: var(--text-muted); }
-    .history-status.failed { background: var(--error); }
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.4; }
-    }
-    .history-info { flex: 1; min-width: 0; }
-    .history-prompt {
-      font-size: 14px;
-      font-weight: 500;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .history-meta {
-      font-size: 12px;
-      color: var(--text-muted);
-      margin-top: 4px;
-    }
-    .history-empty {
-      text-align: center;
-      padding: 40px 20px;
-      color: var(--text-muted);
-      font-size: 14px;
-    }
-
-    /* --- Footer --- */
-    .footer {
-      text-align: center;
-      padding: 32px 24px;
-      color: var(--text-muted);
-      font-size: 13px;
-      border-top: 1px solid var(--border);
-      margin-top: 48px;
-    }
-
-    /* --- Responsive --- */
-    @media (max-width: 640px) {
-      .controls { flex-direction: column; }
-      .control-group { min-width: 100%; }
-      .generate-btn { width: 100%; }
-      .header-inner { flex-direction: column; gap: 12px; text-align: center; }
-      .result-actions { flex-direction: column; }
-      .btn-download, .btn-secondary { width: 100%; text-align: center; justify-content: center; }
-    }
+    body { font-family: 'Inter', sans-serif; }
+    .font-mono { font-family: 'JetBrains+Mono', monospace; }
+    ::-webkit-scrollbar { width: 4px; height: 4px; }
+    ::-webkit-scrollbar-track { background: #050507; }
+    ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 4px; }
   </style>
 </head>
-<body>
+<body class="bg-[#050507] text-zinc-100 antialiased overflow-hidden select-none">
+  <div id="root"></div>
 
-  <!-- Header -->
-  <header class="header">
-    <div class="header-inner">
-      <div>
-        <div class="logo">ClipCraft</div>
-        <div class="logo-sub">AI Video Generation Platform</div>
-      </div>
-      <div class="demo-badge" id="demoBadge">DEMO MODE</div>
-    </div>
-  </header>
+  <script type="text/babel">
+    const { useState, useEffect } = React;
 
-  <div class="container">
-
-    <!-- Generate Section -->
-    <div class="card">
-      <div class="card-title">Create a Video</div>
-
-      <div class="prompt-wrapper">
-        <textarea
-          class="prompt-input"
-          id="prompt"
-          placeholder="Describe the video you want to generate...&#10;e.g. A cinematic drone shot over a misty mountain range at sunrise"
-          maxlength="500"
-          rows="3"
-        ></textarea>
-        <div class="char-count"><span id="charCount">0</span>/500</div>
-      </div>
-
-      <div class="controls">
-        <div class="control-group">
-          <label class="control-label">Style</label>
-          <select class="control-select" id="style">
-            <option value="cinematic">Cinematic</option>
-            <option value="anime">Anime</option>
-            <option value="drone">Drone Shot</option>
-            <option value="macro">Macro</option>
-            <option value="timelapse">Timelapse</option>
-            <option value="slow-motion">Slow Motion</option>
-          </select>
-        </div>
-
-        <div class="control-group">
-          <label class="control-label">Duration</label>
-          <select class="control-select" id="duration">
-            <option value="2">2 seconds</option>
-            <option value="3">3 seconds</option>
-            <option value="5" selected>5 seconds</option>
-            <option value="10">10 seconds</option>
-            <option value="15">15 seconds</option>
-          </select>
-        </div>
-
-        <div class="control-group">
-          <label class="control-label">Resolution</label>
-          <select class="control-select" id="resolution">
-            <option value="640x360">360p</option>
-            <option value="1280x720" selected>720p</option>
-            <option value="1920x1080">1080p</option>
-            <option value="3840x2160">4K</option>
-          </select>
-        </div>
-
-        <div class="control-group" style="justify-content: flex-end;">
-          <button class="generate-btn" id="genBtn" onclick="generate()">
-            Generate Video
-          </button>
-        </div>
-      </div>
-
-      <!-- Progress -->
-      <div class="progress-section" id="progressSection">
-        <div class="progress-bar-track">
-          <div class="progress-bar-fill" id="progressFill"></div>
-        </div>
-        <div class="progress-info">
-          <span class="progress-stage" id="progressStage">Initializing...</span>
-          <span class="progress-pct" id="progressPct">0%</span>
-        </div>
-      </div>
-
-      <!-- Error -->
-      <div class="error-banner" id="errorBanner"></div>
-
-      <!-- Result -->
-      <div class="result-section" id="resultSection">
-        <div class="result-player" id="resultPlayer"></div>
-        <div class="result-actions">
-          <a class="btn-download" id="downloadBtn" href="#" download>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            Download
-          </a>
-          <button class="btn-secondary" onclick="generateAnother()">Generate Another</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Job History -->
-    <div class="card">
-      <div class="card-title">Generation History</div>
-      <div class="history-list" id="historyList">
-        <div class="history-empty" id="historyEmpty">
-          No videos generated yet. Create your first video above!
-        </div>
-      </div>
-    </div>
-
-  </div>
-
-  <footer class="footer">
-    ClipCraft &mdash; AI-powered video generation &middot; Built with FastAPI
-  </footer>
-
-  <script>
-    const API_KEY = 'demo';
-    let pollInterval = null;
-    let currentJobId = null;
-
-    // --- Character count ---
-    const promptEl = document.getElementById('prompt');
-    const charCountEl = document.getElementById('charCount');
-    promptEl.addEventListener('input', () => {
-      charCountEl.textContent = promptEl.value.length;
-    });
-
-    // --- Check demo mode ---
-    fetch('/api/health')
-      .then(r => r.json())
-      .then(data => {
-        if (!data.demo_mode) {
-          document.getElementById('demoBadge').style.display = 'none';
-        }
-      })
-      .catch(() => {});
-
-    // --- Generate ---
-    async function generate() {
-      const prompt = promptEl.value.trim();
-      if (!prompt || prompt.length < 3) {
-        showError('Please enter a prompt (at least 3 characters).');
-        return;
+    const ASSET_GALLERY = [
+      {
+        id: 1,
+        title: 'Neon Horizon — Shot 01',
+        duration: '00:05',
+        ratio: '16:9',
+        img: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?q=80&w=1200&auto=format&fit=crop',
+        tag: 'Drone Motion'
+      },
+      {
+        id: 2,
+        title: 'Misty Alpine Ridge',
+        duration: '00:04',
+        ratio: '21:9',
+        img: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?q=80&w=1200&auto=format&fit=crop',
+        tag: 'Pan Left'
+      },
+      {
+        id: 3,
+        title: 'Cyberpunk Intersection',
+        duration: '00:08',
+        ratio: '16:9',
+        img: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?q=80&w=1200&auto=format&fit=crop',
+        tag: 'Zoom Push'
+      },
+      {
+        id: 4,
+        title: 'Monolith Fluid Sculpture',
+        duration: '00:05',
+        ratio: '16:9',
+        img: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=1200&auto=format&fit=crop',
+        tag: 'Macro 85mm'
       }
+    ];
 
-      const style = document.getElementById('style').value;
-      const duration = parseInt(document.getElementById('duration').value);
-      const resolution = document.getElementById('resolution').value;
-      const btn = document.getElementById('genBtn');
+    function StudioApp() {
+      const [prompt, setPrompt] = useState('A cinematic drone sweep across damp atmospheric mountain peaks at twilight, dramatic raytracing lighting, anamorphic optics.');
+      const [style, setStyle] = useState('cinematic');
+      const [duration, setDuration] = useState('5');
+      const [resolution, setResolution] = useState('1280x720');
+      const [lens, setLens] = useState('35mm Anamorphic');
+      const [lighting, setLighting] = useState('Volumetric Fog');
+      const [velocity, setVelocity] = useState(65);
+      
+      const [activeShot, setActiveShot] = useState(ASSET_GALLERY[0]);
+      const [isPlaying, setIsPlaying] = useState(false);
+      const [isRendering, setIsRendering] = useState(false);
+      const [progress, setProgress] = useState(0);
+      const [stage, setStage] = useState('');
+      const [renderResult, setRenderResult] = useState(null);
+      const [error, setError] = useState(null);
 
-      // Reset UI
-      btn.disabled = true;
-      btn.textContent = 'Generating...';
-      btn.classList.add('generating');
-      hideError();
-      hideResult();
-      showProgress();
+      // Start Video Generation Workflow
+      async function handleRender() {
+        if (!prompt.trim()) return;
 
-      try {
-        const res = await fetch('/api/generate', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-API-Key': API_KEY
-          },
-          body: JSON.stringify({ prompt, style, duration, resolution })
-        });
+        setIsRendering(true);
+        setProgress(0);
+        setStage('Initializing Camera Rig...');
+        setRenderResult(null);
+        setError(null);
 
-        if (!res.ok) {
-          const err = await res.json();
-          throw new Error(err.detail || 'Failed to start generation');
-        }
-
-        const data = await res.json();
-        currentJobId = data.job_id;
-        pollForResult(data.job_id);
-      } catch (e) {
-        showError(e.message);
-        resetButton();
-      }
-    }
-
-    // --- Poll for result ---
-    function pollForResult(jobId) {
-      if (pollInterval) clearInterval(pollInterval);
-
-      pollInterval = setInterval(async () => {
         try {
-          const res = await fetch(`/api/jobs/${jobId}`, {
-            headers: { 'X-API-Key': API_KEY }
+          const response = await fetch('/api/generate', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-API-Key': 'demo'
+            },
+            body: JSON.stringify({
+              prompt: `${prompt} | Lens: ${lens}, Lighting: ${lighting}`,
+              style,
+              duration: parseInt(duration),
+              resolution
+            })
           });
-          if (!res.ok) throw new Error('Failed to check status');
 
-          const data = await res.json();
-          updateProgress(data.progress, data.stage);
-
-          if (data.status === 'completed') {
-            clearInterval(pollInterval);
-            pollInterval = null;
-            showResult(data.result_url);
-            resetButton();
-            loadHistory();
-          } else if (data.status === 'failed') {
-            clearInterval(pollInterval);
-            pollInterval = null;
-            showError(data.error || 'Video generation failed');
-            hideProgress();
-            resetButton();
-            loadHistory();
+          if (!response.ok) {
+            const errData = await response.json();
+            throw new Error(errData.detail || 'Failed to submit generation task');
           }
+
+          const data = await response.json();
+          pollJobStatus(data.job_id);
         } catch (e) {
-          clearInterval(pollInterval);
-          pollInterval = null;
-          showError('Lost connection. Please try again.');
-          resetButton();
+          setError(e.message);
+          setIsRendering(false);
         }
-      }, 1500);
-    }
-
-    // --- Progress UI ---
-    function showProgress() {
-      document.getElementById('progressSection').classList.add('active');
-      updateProgress(0, 'Submitting job...');
-    }
-    function hideProgress() {
-      document.getElementById('progressSection').classList.remove('active');
-    }
-    function updateProgress(pct, stage) {
-      document.getElementById('progressFill').style.width = pct + '%';
-      document.getElementById('progressPct').textContent = pct + '%';
-      document.getElementById('progressStage').textContent = stage || 'Processing...';
-    }
-
-    // --- Result UI ---
-    function showResult(url) {
-      hideProgress();
-      const section = document.getElementById('resultSection');
-      const player = document.getElementById('resultPlayer');
-      const downloadBtn = document.getElementById('downloadBtn');
-
-      // Determine content type from URL
-      if (url.endsWith('.svg')) {
-        player.innerHTML = `<object data="${url}" type="image/svg+xml" style="width:100%;min-height:400px;border-radius:12px;background:#0f0f23;"></object>`;
-      } else if (url.endsWith('.mp4') || url.endsWith('.webm')) {
-        player.innerHTML = `<video controls autoplay loop playsinline src="${url}" style="width:100%;border-radius:12px;"></video>`;
-      } else {
-        player.innerHTML = `<video controls autoplay loop playsinline src="${url}" style="width:100%;border-radius:12px;"></video>`;
       }
 
-      downloadBtn.href = url;
-      section.classList.add('active');
-    }
-    function hideResult() {
-      document.getElementById('resultSection').classList.remove('active');
-    }
-    function generateAnother() {
-      hideResult();
-      promptEl.value = '';
-      charCountEl.textContent = '0';
-      promptEl.focus();
-    }
+      // Poll Status
+      function pollJobStatus(jobId) {
+        const interval = setInterval(async () => {
+          try {
+            const res = await fetch(`/api/jobs/${jobId}`, {
+              headers: { 'X-API-Key': 'demo' }
+            });
+            if (!res.ok) throw new Error('Status polling failed');
 
-    // --- Error UI ---
-    function showError(msg) {
-      const el = document.getElementById('errorBanner');
-      el.textContent = msg;
-      el.classList.add('active');
-    }
-    function hideError() {
-      document.getElementById('errorBanner').classList.remove('active');
-    }
+            const statusData = await res.json();
+            setProgress(statusData.progress || 0);
+            setStage(statusData.stage || 'Rendering frames...');
 
-    // --- Button reset ---
-    function resetButton() {
-      const btn = document.getElementById('genBtn');
-      btn.disabled = false;
-      btn.textContent = 'Generate Video';
-      btn.classList.remove('generating');
-    }
-
-    // --- Job History ---
-    async function loadHistory() {
-      try {
-        const res = await fetch('/api/jobs', {
-          headers: { 'X-API-Key': API_KEY }
-        });
-        if (!res.ok) return;
-        const data = await res.json();
-
-        const list = document.getElementById('historyList');
-        const empty = document.getElementById('historyEmpty');
-
-        if (!data.jobs || data.jobs.length === 0) {
-          empty.style.display = 'block';
-          return;
-        }
-
-        empty.style.display = 'none';
-        // Keep only the job items, not the empty message
-        list.innerHTML = '';
-        list.appendChild(empty);
-        empty.style.display = 'none';
-
-        data.jobs.forEach(job => {
-          const item = document.createElement('div');
-          item.className = 'history-item';
-          item.onclick = () => {
-            if (job.status === 'completed' && job.result_url) {
-              showResult(job.result_url);
-              window.scrollTo({ top: 0, behavior: 'smooth' });
+            if (statusData.status === 'completed') {
+              clearInterval(interval);
+              setIsRendering(false);
+              setRenderResult(statusData.result_url);
+            } else if (statusData.status === 'failed') {
+              clearInterval(interval);
+              setIsRendering(false);
+              setError(statusData.error || 'Rendering engine error');
             }
-          };
-
-          const statusClass = job.status || 'pending';
-          const timeAgo = formatTimeAgo(job.created_at);
-
-          item.innerHTML = `
-            <div class="history-status ${statusClass}"></div>
-            <div class="history-info">
-              <div class="history-prompt">${escapeHtml(job.prompt)}</div>
-              <div class="history-meta">${job.style} &middot; ${job.duration_sec}s &middot; ${job.resolution} &middot; ${timeAgo}</div>
-            </div>
-          `;
-          list.appendChild(item);
-        });
-      } catch (e) {
-        // Silently fail -- history is non-critical
+          } catch (e) {
+            clearInterval(interval);
+            setIsRendering(false);
+            setError('Connection lost during render');
+          }
+        }, 1200);
       }
+
+      return (
+        <div className="flex h-screen w-full bg-[#050507] text-zinc-100">
+          
+          {/* LEFT SIDEBAR: Optics & Camera Controls */}
+          <aside className="w-80 border-r border-white/10 bg-[#09090d]/90 backdrop-blur-xl flex flex-col justify-between z-20">
+            <div className="p-5 space-y-6 overflow-y-auto">
+              
+              {/* Brand Header */}
+              <div className="flex items-center justify-between pb-4 border-b border-white/10">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-violet-600 via-indigo-500 to-fuchsia-500 p-[1px] shadow-lg shadow-violet-500/20">
+                    <div className="w-full h-full bg-zinc-950 rounded-[7px] flex items-center justify-center font-bold text-violet-400">
+                      CC
+                    </div>
+                  </div>
+                  <span className="font-bold tracking-tight text-sm">CLIPCRAFT <span className="text-[10px] text-zinc-500 font-mono">v2.4</span></span>
+                </div>
+                <span className="px-2 py-0.5 text-[10px] font-mono tracking-wider text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-full">
+                  4K READY
+                </span>
+              </div>
+
+              {/* Camera Optics Rig */}
+              <div className="space-y-4">
+                <span className="text-[10px] font-mono uppercase tracking-widest text-zinc-500">Camera Rig Parameters</span>
+
+                {/* Lens */}
+                <div className="space-y-1.5">
+                  <label className="text-xs text-zinc-400 font-medium">Focal Optics</label>
+                  <select 
+                    value={lens}
+                    onChange={(e) => setLens(e.target.value)}
+                    className="w-full bg-zinc-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:border-violet-500"
+                  >
+                    <option>24mm Ultra-Wide</option>
+                    <option>35mm Anamorphic</option>
+                    <option>50mm Prime Cinematic</option>
+                    <option>85mm Portrait Macro</option>
+                  </select>
+                </div>
+
+                {/* Atmosphere */}
+                <div className="space-y-1.5">
+                  <label className="text-xs text-zinc-400 font-medium">Atmosphere & Lighting</label>
+                  <select 
+                    value={lighting}
+                    onChange={(e) => setLighting(e.target.value)}
+                    className="w-full bg-zinc-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:border-violet-500"
+                  >
+                    <option>Golden Hour Raytracing</option>
+                    <option>Volumetric Fog & Cyan Glow</option>
+                    <option>Noir High-Contrast Studio</option>
+                    <option>Moody Overcast Natural</option>
+                  </select>
+                </div>
+
+                {/* Duration & Resolution */}
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <label className="text-[11px] text-zinc-400">Duration</label>
+                    <select 
+                      value={duration} 
+                      onChange={(e) => setDuration(e.target.value)}
+                      className="w-full bg-zinc-900 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-zinc-200"
+                    >
+                      <option value="2">2s</option>
+                      <option value="5">5s</option>
+                      <option value="10">10s</option>
+                      <option value="15">15s</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[11px] text-zinc-400">Resolution</label>
+                    <select 
+                      value={resolution} 
+                      onChange={(e) => setResolution(e.target.value)}
+                      className="w-full bg-zinc-900 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-zinc-200"
+                    >
+                      <option value="1280x720">720p HD</option>
+                      <option value="1920x1080">1080p FHD</option>
+                      <option value="3840x2160">4K UHD</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Velocity */}
+                <div className="space-y-1.5 pt-2">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-zinc-400">Camera Velocity</span>
+                    <span className="font-mono text-violet-400">{velocity}%</span>
+                  </div>
+                  <input 
+                    type="range" min="0" max="100" value={velocity}
+                    onChange={(e) => setVelocity(e.target.value)}
+                    className="w-full h-1 bg-zinc-800 rounded-lg appearance-none accent-violet-500 cursor-pointer"
+                  />
+                </div>
+              </div>
+
+            </div>
+
+            {/* Account Footer */}
+            <div className="p-4 border-t border-white/10 bg-zinc-950/50 flex items-center justify-between">
+              <div>
+                <div className="text-xs font-semibold text-zinc-200">Director Tier</div>
+                <div className="text-[10px] font-mono text-zinc-500">1,850 Credits</div>
+              </div>
+              <span className="px-2.5 py-1 bg-violet-600/20 text-violet-300 border border-violet-500/30 rounded-lg text-xs font-medium">
+                PRO ACTIVE
+              </span>
+            </div>
+          </aside>
+
+          {/* MAIN VIEWPORT AREA */}
+          <main className="flex-1 flex flex-col justify-between relative bg-[#050507]">
+            
+            {/* Header Toolbar */}
+            <header className="h-14 border-b border-white/10 px-6 flex items-center justify-between bg-zinc-950/40 backdrop-blur-md">
+              <div className="flex items-center gap-3">
+                <span className="text-xs font-medium text-zinc-300">{activeShot.title}</span>
+                <span className="text-[10px] font-mono px-2 py-0.5 bg-zinc-900 border border-white/10 rounded text-zinc-400">
+                  {activeShot.ratio}
+                </span>
+              </div>
+              <div className="text-xs font-mono text-zinc-500">
+                ENGINE: FASTAPI + RUNWAY ML
+              </div>
+            </header>
+
+            {/* Display Viewport */}
+            <section className="flex-1 p-6 flex items-center justify-center relative">
+              <div className="relative w-full max-w-5xl aspect-video rounded-2xl overflow-hidden border border-white/10 bg-zinc-950 shadow-2xl group flex items-center justify-center">
+                
+                {renderResult ? (
+                  renderResult.endsWith('.svg') ? (
+                    <object data={renderResult} type="image/svg+xml" className="w-full h-full object-contain" />
+                  ) : (
+                    <video src={renderResult} controls autoPlay loop className="w-full h-full object-cover" />
+                  )
+                ) : isRendering ? (
+                  <div className="flex flex-col items-center gap-4 p-8 text-center max-w-md">
+                    <div className="w-12 h-12 border-4 border-violet-500/20 border-t-violet-500 rounded-full animate-spin" />
+                    <div>
+                      <p className="text-sm font-semibold text-zinc-200 capitalize">{stage}</p>
+                      <p className="text-xs text-zinc-500 font-mono mt-1">{progress}% Rendered</p>
+                    </div>
+                    <div className="w-full bg-zinc-900 h-1.5 rounded-full overflow-hidden border border-white/10">
+                      <div className="bg-gradient-to-r from-violet-500 to-indigo-500 h-full transition-all duration-300" style={{ width: `${progress}%` }} />
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <img src={activeShot.img} alt="Preview" className="w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/20" />
+                    <div className="absolute top-4 left-4 flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                      <span className="text-[11px] font-mono text-zinc-300 bg-black/60 backdrop-blur-md px-2.5 py-1 rounded-md border border-white/10">
+                        CANVAS PREVIEW &middot; 24 FPS
+                      </span>
+                    </div>
+                  </>
+                )}
+
+                {error && (
+                  <div className="absolute bottom-4 left-4 right-4 p-3 bg-red-500/10 border border-red-500/30 text-red-400 text-xs rounded-xl backdrop-blur-md">
+                    {error}
+                  </div>
+                )}
+              </div>
+            </section>
+
+            {/* Timeline Bar */}
+            <section className="h-40 border-t border-white/10 bg-zinc-950/90 p-4 flex flex-col justify-between">
+              <div className="flex items-center justify-between text-xs font-mono text-zinc-400 px-2">
+                <span>SEQUENCE TIMELINE</span>
+                <span>00:00:05</span>
+              </div>
+
+              <div className="flex gap-3 overflow-x-auto py-1">
+                {ASSET_GALLERY.map((shot) => (
+                  <div 
+                    key={shot.id}
+                    onClick={() => { setActiveShot(shot); setRenderResult(null); }}
+                    className={`h-20 min-w-[150px] rounded-xl overflow-hidden border relative cursor-pointer transition-all ${
+                      activeShot.id === shot.id 
+                        ? 'border-violet-500 ring-2 ring-violet-500/30' 
+                        : 'border-white/10 opacity-50 hover:opacity-100'
+                    }`}
+                  >
+                    <img src={shot.img} className="w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent p-2 flex flex-col justify-end">
+                      <span className="text-[10px] font-medium text-zinc-200 truncate">{shot.title}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+          </main>
+
+          {/* RIGHT SIDEBAR: Scene Direction */}
+          <aside className="w-80 border-l border-white/10 bg-[#09090d]/90 backdrop-blur-xl p-5 flex flex-col justify-between z-20">
+            <div className="space-y-5">
+              <span className="text-[10px] font-mono uppercase tracking-widest text-zinc-500">Shot Composition</span>
+
+              <div className="space-y-2">
+                <label className="text-xs text-zinc-400 font-medium">Prompt Direction</label>
+                <textarea 
+                  rows={5}
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  className="w-full bg-zinc-900 border border-white/10 rounded-xl p-3 text-xs text-zinc-200 focus:outline-none focus:border-violet-500 leading-relaxed resize-none"
+                />
+              </div>
+
+              {/* 3D Motion Grid */}
+              <div className="space-y-2">
+                <span className="text-[11px] font-mono text-zinc-400">Vector Direction</span>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {['Pan L', 'Tilt Up', 'Pan R', 'Zoom In', 'Track', 'Zoom Out', 'Roll L', 'Tilt Down', 'Roll R'].map((dir, i) => (
+                    <button key={dir} className={`py-2 text-[10px] font-mono rounded-lg border text-center ${i === 3 ? 'bg-violet-600/20 border-violet-500/40 text-violet-300' : 'bg-zinc-900 border-white/10 text-zinc-400'}`}>
+                      {dir}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <button 
+              onClick={handleRender}
+              disabled={isRendering}
+              className="w-full py-3.5 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-semibold text-xs rounded-xl shadow-lg shadow-violet-600/25 border border-white/10 transition-all disabled:opacity-50"
+            >
+              {isRendering ? 'Rendering Scene...' : 'Render Video Scene'}
+            </button>
+          </aside>
+
+        </div>
+      );
     }
 
-    function formatTimeAgo(timestamp) {
-      if (!timestamp) return '';
-      const diff = Date.now() / 1000 - timestamp;
-      if (diff < 60) return 'just now';
-      if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
-      if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
-      return Math.floor(diff / 86400) + 'd ago';
-    }
-
-    function escapeHtml(str) {
-      const div = document.createElement('div');
-      div.textContent = str;
-      return div.innerHTML;
-    }
-
-    // --- Load history on page load ---
-    loadHistory();
+    ReactDOM.createRoot(document.getElementById('root')).render(<StudioApp />);
   </script>
 </body>
 </html>
