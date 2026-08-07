@@ -1,13 +1,13 @@
-"""FastAPI Application Server for ClipCraft."""
+"""ClipCraft API Server - Video Generation SaaS."""
 from fastapi import FastAPI, HTTPException, Depends, Header, BackgroundTasks
 from fastapi.responses import JSONResponse, FileResponse
-from typing import Optional
 import os
 
 from .config import settings
 from .models import GenerateRequest, JobResponse, JobStatusResponse
 from .video_service import VideoService
 from .job_queue import JobQueue, JobStatus
+from .progress import ProgressTracker
 from .billing import BillingSystem
 
 app = FastAPI(title="ClipCraft API", version="1.0.0")
@@ -20,16 +20,11 @@ os.makedirs(CACHE_DIR, exist_ok=True)
 video_service = VideoService(
     provider=settings.VIDEO_PROVIDER,
     api_key=settings.VIDEO_API_KEY,
-    cache_dir=CACHE_DIR
+    cache_dir=CACHE_DIR,
 )
 job_queue = JobQueue(max_concurrent=settings.MAX_CONCURRENT_JOBS)
+progress_tracker = ProgressTracker()
 billing = BillingSystem()
-
-if not IS_VERCEL:
-    from fastapi.staticfiles import StaticFiles
-    public_dir = os.path.join(BASE_DIR, "public")
-    if os.path.isdir(public_dir):
-        app.mount("/static", StaticFiles(directory=public_dir), name="static")
 
 
 async def get_user(x_api_key: str = Header(default="demo")):
@@ -42,35 +37,28 @@ async def get_user(x_api_key: str = Header(default="demo")):
 
 
 async def process_video_job(job_id: str):
-    job = job_queue.get_job(job_id)
+    job = job_queue.jobs.get(job_id)
     if not job:
         return
 
     try:
-        job_queue.update_progress(job_id, 10, "initializing", JobStatus.PROCESSING)
+        progress_tracker.update(job_id, 10, "initializing", "Preparing generation")
 
         result = await video_service.generate(
             prompt=job.prompt,
             style=job.style,
             duration_sec=job.duration_sec,
             resolution=job.resolution,
-            progress_callback=lambda p, s, m: job_queue.update_progress(job_id, p, s)
+            progress_callback=lambda p, s, m: progress_tracker.update(job_id, p, s, m)
         )
 
         job_queue.complete_job(job_id, result["video_url"])
-        billing.record_generation(job.user_id, job.prompt, result["cost"], job.resolution, job.duration_sec)
+        progress_tracker.update(job_id, 100, "completed", "Video ready")
+        billing.record_generation(job.user_id, job.prompt, result["cost"], job.resolution)
 
     except Exception as e:
         job_queue.fail_job(job_id, str(e))
-
-
-if not IS_VERCEL:
-    @app.get("/")
-    async def serve_index():
-        index_path = os.path.join(BASE_DIR, "public", "index.html")
-        if os.path.exists(index_path):
-            return FileResponse(index_path, media_type="text/html")
-        return JSONResponse({"message": "ClipCraft API running"})
+        progress_tracker.update(job_id, 0, "failed", str(e))
 
 
 @app.post("/api/generate", response_model=JobResponse)
@@ -84,51 +72,49 @@ async def generate_video(req: GenerateRequest, background_tasks: BackgroundTasks
         style=req.style,
         duration_sec=req.duration,
         resolution=req.resolution,
-        user_id=user["id"],
-        webhook_url=req.webhook_url
+        user_id=user["id"]
     )
+    progress_tracker.register_job(job_id, webhook_url=req.webhook_url)
 
-    background_tasks.add_task(process_video_job, job_id)
+    job = job_queue.process_next()
+    if job:
+        if IS_VERCEL or video_service.demo_mode:
+            # On Vercel serverless, execute task inline before worker freezes
+            await process_video_job(job.id)
+        else:
+            background_tasks.add_task(process_video_job, job.id)
 
     return JobResponse(
         job_id=job_id,
         status="pending",
-        message="Job queued successfully",
+        message="Video generation job submitted",
         poll_url=f"/api/jobs/{job_id}"
     )
 
 
 @app.get("/api/jobs/{job_id}", response_model=JobStatusResponse)
 async def get_job_status(job_id: str, user=Depends(get_user)):
-    job = job_queue.get_job(job_id)
-    if not job:
+    status = job_queue.get_status(job_id)
+    if not status:
         raise HTTPException(status_code=404, detail="Job not found")
 
+    poll_data = progress_tracker.poll(job_id)
+    progress = poll_data.get("progress", 0) if poll_data and "error" not in poll_data else 0
+    stage = poll_data.get("stage", "unknown") if poll_data and "error" not in poll_data else "unknown"
+
     return JobStatusResponse(
-        job_id=job.id,
-        status=job.status.value,
-        progress=job.progress,
-        stage=job.stage,
-        result_url=job.result_url,
-        error=job.error,
-        estimated_remaining_sec=int((100 - job.progress) * 1.2) if 0 < job.progress < 100 else None
+        job_id=job_id,
+        status=status["status"],
+        progress=progress,
+        stage=stage,
+        result_url=status.get("result_url"),
+        error=status.get("error")
     )
-
-
-@app.get("/api/jobs")
-async def list_jobs(user=Depends(get_user)):
-    jobs = job_queue.list_user_jobs(user["id"])
-    return {"jobs": jobs, "total": len(jobs)}
 
 
 @app.get("/api/health")
 async def health():
-    return {
-        "status": "ok",
-        "provider": settings.VIDEO_PROVIDER,
-        "demo_mode": video_service.demo_mode,
-        "queue": job_queue.get_queue_stats()
-    }
+    return {"status": "ok", "demo_mode": video_service.demo_mode}
 
 
 @app.get("/cache/videos/{filename}")
@@ -136,6 +122,5 @@ async def serve_cache_video(filename: str):
     file_path = os.path.join(CACHE_DIR, filename)
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="File not found")
-
     media_type = "image/svg+xml" if filename.endswith(".svg") else "video/mp4"
     return FileResponse(file_path, media_type=media_type)
