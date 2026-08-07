@@ -1,4 +1,4 @@
-"""Video service integrating Runway ML and Replicate APIs."""
+"""Video generation service - wraps Runway ML / Replicate APIs."""
 import asyncio
 import httpx
 import time
@@ -8,8 +8,10 @@ from typing import Optional, Callable, Dict
 
 
 class VideoService:
+    """Generates videos via Runway ML or Replicate APIs with demo mode fallback."""
 
-    def __init__(self, provider: str = "runway", api_key: str = "", cache_dir: str = "./cache/videos"):
+    def __init__(self, provider: str = "runway", api_key: str = "",
+                 cache_dir: str = "/tmp/cache/videos"):
         self.provider = provider
         self.api_key = api_key
         self.cache_dir = Path(cache_dir)
@@ -19,6 +21,7 @@ class VideoService:
     async def generate(self, prompt: str, duration_sec: int = 5,
                        resolution: str = "1280x720", style: str = "cinematic",
                        progress_callback: Optional[Callable] = None) -> Dict:
+        """Generate a video from a text prompt."""
         if self.demo_mode:
             return await self._generate_demo(prompt, duration_sec, resolution, progress_callback)
 
@@ -36,8 +39,8 @@ class VideoService:
 
         width, height = map(int, resolution.split("x"))
 
-        for pct in range(20, 90, 20):
-            await asyncio.sleep(0.3)
+        for pct in range(20, 90, 25):
+            await asyncio.sleep(0.2)
             if progress_callback:
                 progress_callback(pct, "generating", f"Demo rendering frame {pct}%")
 
@@ -50,17 +53,18 @@ class VideoService:
         color2 = f"#{((prompt_hash >> 4) & 0xFFFFFF):06x}"
         display_prompt = prompt[:60] + "..." if len(prompt) > 60 else prompt
 
-        svg_content = f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}">
-            <rect width="{width}" height="{height}" fill="#0f0f23"/>
-            <circle cx="{width*0.5}" cy="{height*0.4}" r="80" fill="{color1}" opacity="0.4"/>
-            <text x="{width/2}" y="{height*0.4}" text-anchor="middle" fill="white" font-size="24">ClipCraft Demo</text>
-            <text x="{width/2}" y="{height*0.55}" text-anchor="middle" fill="#a78bfa" font-size="16">{display_prompt}</text>
-        </svg>'''
+        svg_content = f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" width="{width}" height="{height}">
+  <rect width="{width}" height="{height}" fill="#0f0f23"/>
+  <circle cx="{width*0.3}" cy="{height*0.4}" r="80" fill="{color1}" opacity="0.4"/>
+  <circle cx="{width*0.7}" cy="{height*0.6}" r="60" fill="{color2}" opacity="0.4"/>
+  <text x="{width/2}" y="{height*0.4}" text-anchor="middle" fill="white" font-family="system-ui" font-size="24" font-weight="bold">ClipCraft Demo</text>
+  <text x="{width/2}" y="{height*0.55}" text-anchor="middle" fill="#a78bfa" font-family="system-ui" font-size="16">{display_prompt}</text>
+</svg>'''
 
         svg_path.write_text(svg_content)
 
         if progress_callback:
-            progress_callback(100, "completed", "Demo video ready")
+            progress_callback(100, "finalizing", "Demo video ready")
 
         return {
             "video_url": f"/cache/videos/{svg_filename}",
@@ -71,113 +75,48 @@ class VideoService:
             "demo": True,
         }
 
-    async def _generate_replicate(self, client: httpx.AsyncClient, prompt, duration_sec, resolution, style, progress_callback=None):
-        if progress_callback:
-            progress_callback(10, "submitting", "Sending to Replicate API")
-
-        # Stable Video Diffusion model standard API payload
-        width, height = map(int, resolution.split("x"))
-        response = await client.post(
-            "https://api.replicate.com/v1/models/stability-ai/stable-video-diffusion/predictions",
-            headers={
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "input": {
-                    "cond_augmented_prompt": f"{style}: {prompt}",
-                    "video_length": f"{duration_sec}s",
-                    "width": width,
-                    "height": height
-                }
-            }
-        )
-        response.raise_for_status()
-        prediction = response.json()
-        poll_url = prediction["urls"]["get"]
-
-        return await self._poll_replicate_job(client, poll_url, progress_callback)
-
-    async def _poll_replicate_job(self, client: httpx.AsyncClient, poll_url: str, progress_callback=None, timeout: int = 600):
-        start = time.time()
-        headers = {"Authorization": f"Bearer {self.api_key}"}
-
-        while time.time() - start < timeout:
-            resp = await client.get(poll_url, headers=headers)
-            resp.raise_for_status()
-            data = resp.json()
-            status = data.get("status")
-
-            if status == "succeeded":
-                output = data.get("output")
-                # Handle Replicate list vs string output formats
-                video_url = output[0] if isinstance(output, list) else output
-                return {
-                    "video_url": video_url,
-                    "duration": 5,
-                    "resolution": "1280x720",
-                    "cost": 0.05,
-                }
-            elif status == "failed":
-                raise RuntimeError(f"Replicate generation failed: {data.get('error')}")
-
-            if progress_callback:
-                progress_callback(50, "generating", "Rendering video frames")
-
-            await asyncio.sleep(4)
-
-        raise TimeoutError("Replicate generation timed out")
-
     async def _generate_runway(self, client: httpx.AsyncClient, prompt, duration_sec, resolution, style, progress_callback=None):
         if progress_callback:
             progress_callback(10, "submitting", "Sending to Runway ML API")
 
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "X-Runway-Version": "2024-11-06",
-            "Content-Type": "application/json",
-        }
         response = await client.post(
-            "https://api.dev.runwayml.com/v1/tasks",
-            headers=headers,
-            json={
-                "taskType": "gen3a_turbo",
-                "promptText": f"{style}: {prompt}",
-                "duration": duration_sec,
-                "ratio": "16:9"
-            }
+            "https://api.runwayml.com/v1/generations",
+            headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
+            json={"prompt": prompt, "duration": duration_sec, "resolution": resolution, "style": style}
         )
         response.raise_for_status()
-        task_id = response.json()["id"]
+        job = response.json()
+        
+        return await self._poll_job(client, f"https://api.runwayml.com/v1/generations/{job['id']}", {"Authorization": f"Bearer {self.api_key}"}, progress_callback)
 
-        return await self._poll_runway_job(client, task_id, headers, progress_callback)
+    async def _generate_replicate(self, client: httpx.AsyncClient, prompt, duration_sec, resolution, style, progress_callback=None):
+        if progress_callback:
+            progress_callback(10, "submitting", "Sending to Replicate API")
 
-    async def _poll_runway_job(self, client: httpx.AsyncClient, task_id: str, headers: Dict, progress_callback=None, timeout: int = 600):
+        response = await client.post(
+            "https://api.replicate.com/v1/predictions",
+            headers={"Authorization": f"Token {self.api_key}", "Content-Type": "application/json"},
+            json={"version": "latest", "input": {"prompt": f"{style}: {prompt}", "num_frames": duration_sec * 24}}
+        )
+        response.raise_for_status()
+        prediction = response.json()
+
+        return await self._poll_job(client, prediction["urls"]["get"], {"Authorization": f"Token {self.api_key}"}, progress_callback)
+
+    async def _poll_job(self, client: httpx.AsyncClient, url, headers, progress_callback=None, timeout: int = 600):
         start = time.time()
-        url = f"https://api.dev.runwayml.com/v1/tasks/{task_id}"
-
         while time.time() - start < timeout:
             resp = await client.get(url, headers=headers)
             resp.raise_for_status()
-            data = resp.json()
-            status = data.get("status")
+            status = resp.json()
 
-            if status == "SUCCEEDED":
-                output = data.get("output", [])
-                video_url = output[0] if isinstance(output, list) and output else None
-                return {
-                    "video_url": video_url,
-                    "duration": 5,
-                    "resolution": "1280x720",
-                    "cost": 0.08,
-                }
-            elif status == "FAILED":
-                raise RuntimeError(f"Runway task failed: {data.get('failure')}")
-
-            progress = int(data.get("progress", 0.5) * 100)
-            if progress_callback:
-                progress_callback(progress, "generating", "Rendering video frames")
+            if status.get("status") in ("succeeded", "SUCCEEDED"):
+                output = status.get("output", {})
+                video_url = output[0] if isinstance(output, list) else output.get("url", output.get("video"))
+                return {"video_url": video_url, "duration": 5, "resolution": "1280x720", "cost": 0.05}
+            elif status.get("status") in ("failed", "FAILED"):
+                raise RuntimeError(f"Generation failed: {status.get('error')}")
 
             await asyncio.sleep(4)
 
-        raise TimeoutError("Runway generation timed out")
+        raise TimeoutError("Video generation timed out")
