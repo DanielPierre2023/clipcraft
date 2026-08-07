@@ -36,7 +36,7 @@
 
   <style>
     body { font-family: 'Inter', sans-serif; }
-    .font-mono { font-family: 'JetBrains+Mono', monospace; }
+    .font-mono { font-family: 'JetBrains Mono', monospace; }
     ::-webkit-scrollbar { width: 4px; height: 4px; }
     ::-webkit-scrollbar-track { background: #050507; }
     ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 4px; }
@@ -89,7 +89,7 @@
       const [duration, setDuration] = useState('5');
       const [resolution, setResolution] = useState('1280x720');
       const [lens, setLens] = useState('35mm Anamorphic');
-      const [lighting, setLighting] = useState('Volumetric Fog');
+      const [lighting, setLighting] = useState('Volumetric Fog & Cyan Glow');
       const [velocity, setVelocity] = useState(65);
       
       const [activeShot, setActiveShot] = useState(ASSET_GALLERY[0]);
@@ -126,8 +126,15 @@
           });
 
           if (!response.ok) {
-            const errData = await response.json();
-            throw new Error(errData.detail || 'Failed to submit generation task');
+            let errorMsg = 'Failed to submit generation task';
+            try {
+              const errData = await response.json();
+              errorMsg = errData.detail || errorMsg;
+            } catch (jsonErr) {
+              const rawText = await response.text();
+              errorMsg = rawText || `Server Error (${response.status})`;
+            }
+            throw new Error(errorMsg);
           }
 
           const data = await response.json();
@@ -145,7 +152,17 @@
             const res = await fetch(`/api/jobs/${jobId}`, {
               headers: { 'X-API-Key': 'demo' }
             });
-            if (!res.ok) throw new Error('Status polling failed');
+
+            if (!res.ok) {
+              let errText = 'Status polling failed';
+              try {
+                const errJson = await res.json();
+                errText = errJson.detail || errText;
+              } catch (e) {
+                errText = await res.text();
+              }
+              throw new Error(errText);
+            }
 
             const statusData = await res.json();
             setProgress(statusData.progress || 0);
@@ -163,7 +180,7 @@
           } catch (e) {
             clearInterval(interval);
             setIsRendering(false);
-            setError('Connection lost during render');
+            setError(e.message || 'Connection lost during render');
           }
         }, 1200);
       }
@@ -332,7 +349,8 @@
                 )}
 
                 {error && (
-                  <div className="absolute bottom-4 left-4 right-4 p-3 bg-red-500/10 border border-red-500/30 text-red-400 text-xs rounded-xl backdrop-blur-md">
+                  <div className="absolute bottom-4 left-4 right-4 p-3.5 bg-red-950/80 border border-red-500/40 text-red-300 text-xs rounded-xl backdrop-blur-md shadow-xl">
+                    <strong className="font-semibold block mb-0.5">Execution Exception:</strong>
                     {error}
                   </div>
                 )}
@@ -350,7 +368,7 @@
                 {ASSET_GALLERY.map((shot) => (
                   <div 
                     key={shot.id}
-                    onClick={() => { setActiveShot(shot); setRenderResult(null); }}
+                    onClick={() => { setActiveShot(shot); setRenderResult(null); setError(null); }}
                     className={`h-20 min-w-[150px] rounded-xl overflow-hidden border relative cursor-pointer transition-all ${
                       activeShot.id === shot.id 
                         ? 'border-violet-500 ring-2 ring-violet-500/30' 
